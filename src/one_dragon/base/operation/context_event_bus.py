@@ -1,9 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Callable, Any, List
 
+from one_dragon.utils import thread_utils
 from one_dragon.utils.log_utils import log
 
-_od_event_bus_executor = ThreadPoolExecutor(thread_name_prefix='od_event_bus', max_workers=8)
+_od_event_bus_executor = ThreadPoolExecutor(thread_name_prefix='od_event_bus', max_workers=32)
 
 
 class ContextEventItem:
@@ -18,19 +19,21 @@ class ContextEventBus:
     def __init__(self):
         self.callbacks: dict[str, List[Callable[[Any], None]]] = {}
 
-    def dispatch_event(self, event_id: str, event_obj: Any = None):
+    def dispatch_event(self, event_id: str, event_obj: Any = None, output_log: bool = True):
         """
         下发事件
         :param event_id: 事件ID
         :param event_obj: 事件体
+        :param output_log: 输出日志
         :return:
         """
-        log.debug("事件触发 %s", event_id)
+        if output_log:
+            log.debug("事件触发 %s", event_id)
         if event_id not in self.callbacks:
             return
-        future_list: List[Future] = []
         for callback in self.callbacks[event_id]:
-            future_list.append(_od_event_bus_executor.submit(callback, ContextEventItem(event_id, event_obj)))
+            future: Future = _od_event_bus_executor.submit(callback, ContextEventItem(event_id, event_obj))
+            future.add_done_callback(thread_utils.handle_future_result)
 
     def listen_event(self, event_id: str, callback: Callable[[ContextEventItem], None]):
         """

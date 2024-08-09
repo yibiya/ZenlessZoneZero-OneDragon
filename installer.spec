@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['src\\one_dragon\\gui\\app\\installer.py'],
+    ['src\\zzz_od\\gui\\zzz_installer.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -35,5 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['assets\\ui\\installer_logo.ico'],
+    icon=['assets\\ui\\zzz_logo.ico'],
 )

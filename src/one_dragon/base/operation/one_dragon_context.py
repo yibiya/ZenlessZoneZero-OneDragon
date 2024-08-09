@@ -1,12 +1,13 @@
 import logging
 from enum import Enum
+from pynput import keyboard, mouse
 from typing import Optional
 
-from pynput import keyboard, mouse
-
+from one_dragon.base.config.one_dragon_config import OneDragonConfig
 from one_dragon.base.controller.controller_base import ControllerBase
-from one_dragon.base.geometry.rectangle import Rect
-from one_dragon.base.key_mouse.key_mouse_listener import KeyMouseButtonListener
+from one_dragon.base.controller.pc_button.pc_button_listener import PcButtonListener
+from one_dragon.base.matcher.ocr.ocr_matcher import OcrMatcher
+from one_dragon.base.matcher.ocr.onnx_ocr_matcher import OnnxOcrMatcher
 from one_dragon.base.matcher.template_matcher import TemplateMatcher
 from one_dragon.base.operation.context_event_bus import ContextEventBus
 from one_dragon.base.screen.screen_loader import ScreenLoader
@@ -49,6 +50,7 @@ class OneDragonContext(ContextEventBus):
         ContextEventBus.__init__(self)
         self.project_config: ProjectConfig = ProjectConfig()
         self.env_config: EnvConfig = EnvConfig()
+        self.one_dragon_config: OneDragonConfig = OneDragonConfig()
 
         self.git_service: GitService = GitService(self.project_config, self.env_config)
         self.python_service: PythonService = PythonService(self.project_config, self.env_config, self.git_service)
@@ -57,17 +59,13 @@ class OneDragonContext(ContextEventBus):
 
         self.screen_loader: ScreenLoader = ScreenLoader()
         self.template_loader: TemplateLoader = TemplateLoader()
-        self.tm: TemplateMatcher = TemplateMatcher()
-        try:
-            from one_dragon.base.matcher.ocr_matcher import OcrMatcher
-            self.ocr: OcrMatcher = OcrMatcher()
-        except Exception:
-            pass
+        self.tm: TemplateMatcher = TemplateMatcher(self.template_loader)
+        self.ocr: OcrMatcher = OnnxOcrMatcher()
         self.controller: ControllerBase = controller
 
         self.keyboard_controller = keyboard.Controller()
         self.mouse_controller = mouse.Controller()
-        self.btn_listener = KeyMouseButtonListener(on_button_tap=self._on_key_press)
+        self.btn_listener = PcButtonListener(on_button_tap=self._on_key_press, listen_keyboard=True)
         self.btn_listener.start()
 
     def init_by_config(self) -> None:
@@ -88,7 +86,7 @@ class OneDragonContext(ContextEventBus):
             return False
 
         self.context_running_state = ContextRunStateEnum.RUN
-        self.controller.init()
+        self.controller.init_before_context_run()
         self.dispatch_event(ContextRunningStateEventEnum.START_RUNNING.value, self.context_running_state)
         return True
 
@@ -144,8 +142,6 @@ class OneDragonContext(ContextEventBus):
             self.stop_running()
         elif key == self.key_screenshot:
             self.screenshot_and_save_debug()
-        elif key == self.key_mouse_pos:
-            self.log_mouse_position()
 
         self.dispatch_event(ContextKeyboardEventEnum.PRESS.value, key)
 
@@ -170,8 +166,8 @@ class OneDragonContext(ContextEventBus):
         return self.env_config.key_screenshot
 
     @property
-    def key_mouse_pos(self) -> str:
-        return self.env_config.key_mouse_pos
+    def key_debug(self) -> str:
+        return self.env_config.key_debug
 
     def screenshot_and_save_debug(self) -> None:
         """
@@ -179,14 +175,6 @@ class OneDragonContext(ContextEventBus):
         """
         if self.controller is None or not self.controller.is_game_window_ready:
             return
-        self.controller.init()
+        self.controller.init_before_context_run()
         img = self.controller.screenshot()
         debug_utils.save_debug_image(img)
-
-    def log_mouse_position(self):
-        if self.controller is None or not self.controller.is_game_window_ready:
-            return
-
-        rect: Rect = self.controller.game_win.win_rect
-        pos = self.mouse_controller.position
-        log.info('当前鼠标坐标 %s', (pos[0] - rect.x1, pos[1] - rect.y1))

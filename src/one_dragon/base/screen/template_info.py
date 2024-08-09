@@ -1,21 +1,22 @@
 import cv2
 import numpy as np
-import shutil
-from typing import List, Optional, Tuple
-
 import os
+import shutil
 from cv2.typing import MatLike
 from enum import Enum
+from functools import lru_cache
+from typing import List, Optional
 
 from one_dragon.base.config.config_item import ConfigItem
+from one_dragon.base.config.yaml_operator import YamlOperator
 from one_dragon.base.geometry.point import Point
 from one_dragon.base.geometry.rectangle import Rect
-from one_dragon.base.yaml_operator import YamlOperator
 from one_dragon.utils import os_utils, cal_utils, cv2_utils
 
 TEMPLATE_RAW_FILE_NAME = 'raw.png'
 TEMPLATE_MASK_FILE_NAME = 'mask.png'
 TEMPLATE_CONFIG_FILE_NAME = 'config.yml'
+TEMPLATE_FEATURES_FILE_NAME = 'features.xml'
 
 
 class TemplateShapeEnum(Enum):
@@ -52,8 +53,6 @@ class TemplateInfo(YamlOperator):
 
         self.raw: Optional[MatLike] = cv2_utils.read_image(get_template_raw_path(self.sub_dir, self.template_id))  # 原图
         self.mask: Optional[MatLike] = cv2_utils.read_image(get_template_mask_path(self.sub_dir, self.template_id))  # 掩码
-        self.kps = None  # 特征点
-        self.desc = None  # 描述符
 
     def get_yml_file_path(self) -> str:
         return get_template_config_path(self.sub_dir, self.template_id)
@@ -65,7 +64,8 @@ class TemplateInfo(YamlOperator):
         :return:
         """
         if idx < 0 or idx >= len(self.point_list):
-            self.point_list.pop(idx)
+            return
+        self.point_list.pop(idx)
 
     def add_point(self, point: Point) -> None:
         """
@@ -98,16 +98,10 @@ class TemplateInfo(YamlOperator):
         elif self.template_shape == TemplateShapeEnum.CIRCLE.value.value:
             if len(self.point_list) < 2:
                 self.point_list.append(point)
-            elif len(self.point_list) == 2:
-                if (cal_utils.distance_between(point, self.point_list[0]) <
-                        cal_utils.distance_between(point, self.point_list[1])):
-                    self.point_list[0] = point
-                else:
-                    self.point_list[1] = point
         elif self.template_shape == TemplateShapeEnum.POLYGON.value.value:
             self.point_list.append(point)
 
-    def get_image(self, t: str) -> MatLike:
+    def get_image(self, t: Optional[str]) -> MatLike:
         if t is None or t == 'raw':
             return self.raw
         if t == 'gray':
@@ -172,7 +166,7 @@ class TemplateInfo(YamlOperator):
         self.make_template_dir()
         raw = self.get_template_raw_by_screen_point()
         if raw is not None:
-            cv2.imwrite(get_template_raw_path(self.sub_dir, self.template_id), raw)
+            cv2_utils.save_image(raw, get_template_raw_path(self.sub_dir, self.template_id))
 
     def save_mask(self) -> None:
         """
@@ -180,9 +174,9 @@ class TemplateInfo(YamlOperator):
         :return:
         """
         self.make_template_dir()
-        mask = self.get_template_mask_by_screen_point() if self.auto_mask else self.mask
+        mask = self.get_template_mask_by_screen_point() if self.auto_mask else None
         if mask is not None:
-            cv2.imwrite(get_template_mask_path(self.sub_dir, self.template_id), mask)
+            cv2_utils.save_image(mask, get_template_mask_path(self.sub_dir, self.template_id))
 
     def delete(self) -> None:
         pass
@@ -232,7 +226,7 @@ class TemplateInfo(YamlOperator):
         :return:
         """
         rect = self.get_template_rect_by_point()
-        return cv2_utils.crop_image_only(self.screen_image, rect) if rect is not None else None
+        return cv2_utils.crop_image_only(self.screen_image, rect, copy=True) if rect is not None else None
 
     def get_template_raw_to_display(self) -> Optional[MatLike]:
         """
@@ -318,20 +312,20 @@ class TemplateInfo(YamlOperator):
             cv2.rectangle(image_to_show,
                           (left_top.x, left_top.y),
                           (right_bottom.x, right_bottom.y),
-                          (0, 0, 255), 2)
+                          (255, 0, 0), 2)
         elif (self.template_shape == TemplateShapeEnum.CIRCLE.value.value
                 and len(self.point_list) == 2):
             center = self.point_list[0]
             r = cal_utils.distance_between(center, self.point_list[1])
-            cv2.circle(image_to_show, (center.x, center.y), int(r), (0, 0, 255), 2)
+            cv2.circle(image_to_show, (center.x, center.y), int(r), (255, 0, 0), 2)
         elif (self.template_shape == TemplateShapeEnum.QUADRILATERAL.value.value
                 and len(self.point_list) == 4):
             points = np.array([[p.x, p.y] for p in self.point_list], dtype=np.int32)
-            cv2.polylines(image_to_show, [points], isClosed=True, color=(0, 0, 255), thickness=2)
+            cv2.polylines(image_to_show, [points], isClosed=True, color=(255, 0, 0), thickness=2)
         elif (self.template_shape == TemplateShapeEnum.POLYGON.value.value
                 and len(self.point_list) > 2):
             points = np.array([[p.x, p.y] for p in self.point_list], dtype=np.int32)
-            cv2.polylines(image_to_show, [points], isClosed=True, color=(0, 0, 255), thickness=2)
+            cv2.polylines(image_to_show, [points], isClosed=True, color=(255, 0, 0), thickness=2)
 
         return image_to_show
 
@@ -434,6 +428,53 @@ class TemplateInfo(YamlOperator):
         ]
         self.point_updated = True
 
+    @lru_cache
+    def get_template_features(self):
+        """
+        获取特征
+        :return:
+        """
+        return cv2_utils.feature_detect_and_compute(self.raw, self.mask)
+
+    def copy_new(self) -> None:
+        """
+        复制变成一个新的
+        :return:
+        """
+        self.template_id = self.template_id + '_copy'
+
+        self.old_sub_dir = self.sub_dir  # 无需删除
+        self.old_template_id = self.template_id
+
+        self.file_path = self.get_yml_file_path()
+
+    def update_all_points(self, dx: int, dy: int) -> None:
+        """
+        所有坐标移动
+        """
+        for point in self.point_list:
+            point.x = point.x + dx
+            point.y = point.y + dy
+        self.point_updated = True
+
+
+@lru_cache
+def get_template_root_dir_path() -> str:
+    """
+    模板文件夹的根目录
+    :return:
+    """
+    return os_utils.get_path_under_work_dir('assets', 'template')
+
+
+@lru_cache
+def get_template_sub_dir_path(sub_dir: str) -> str:
+    """
+    模板文件夹的分类目录
+    :return:
+    """
+    return os.path.join(os_utils.get_path_under_work_dir('assets', 'template'), sub_dir)
+
 
 def get_template_dir_path(sub_dir: str, template_id: str, make_dir: bool = False) -> str:
     """
@@ -471,6 +512,7 @@ def is_template_existed(sub_dir: str, template_id: str, need_raw: bool = True, n
     return True
 
 
+@lru_cache
 def get_template_raw_path(sub_dir: str, template_id: str) -> str:
     """
     模板原图的路径
@@ -481,6 +523,7 @@ def get_template_raw_path(sub_dir: str, template_id: str) -> str:
     return os.path.join(get_template_dir_path(sub_dir, template_id), TEMPLATE_RAW_FILE_NAME)
 
 
+@lru_cache
 def get_template_mask_path(sub_dir: str, template_id: str) -> str:
     """
     模板掩码的路径
@@ -491,6 +534,7 @@ def get_template_mask_path(sub_dir: str, template_id: str) -> str:
     return os.path.join(get_template_dir_path(sub_dir, template_id), TEMPLATE_MASK_FILE_NAME)
 
 
+@lru_cache
 def get_template_config_path(sub_dir: str, template_id: str) -> str:
     """
     模板配置文件的路径
@@ -510,3 +554,14 @@ def is_template_config_existed(sub_dir: str, template_id: str) -> bool:
     """
     template_dir = get_template_dir_path(sub_dir, template_id)
     return os.path.exists(os.path.join(template_dir, TEMPLATE_CONFIG_FILE_NAME))
+
+
+@lru_cache
+def get_template_features_path(sub_dir: str, template_id: str) -> str:
+    """
+    模板特征文件的路径
+    :param sub_dir: 模板分类
+    :param template_id: 模板id
+    :return:
+    """
+    return os.path.join(get_template_dir_path(sub_dir, template_id), TEMPLATE_FEATURES_FILE_NAME)

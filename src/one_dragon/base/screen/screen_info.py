@@ -3,9 +3,9 @@ import os
 from cv2.typing import MatLike
 from typing import List, Optional
 
+from one_dragon.base.config.yaml_operator import YamlOperator
 from one_dragon.base.geometry.rectangle import Rect
 from one_dragon.base.screen.screen_area import ScreenArea
-from one_dragon.base.yaml_operator import YamlOperator
 from one_dragon.utils import os_utils, cv2_utils
 
 
@@ -16,7 +16,7 @@ class ScreenInfo(YamlOperator):
         self.screen_id: str = screen_id  # 画面ID 用于加载文件
         self.screen_name: str = ''  # 画面名称 用于显示
 
-        self.screen_image: MatLike = None
+        self.screen_image: Optional[MatLike] = None
 
         self.pc_alt: bool = False  # PC端点击是否需要使用ALT键
         self.area_list: List[ScreenArea] = []  # 画面中包含的区域
@@ -92,7 +92,7 @@ class ScreenInfo(YamlOperator):
             cv2.rectangle(image,
                           (area.pc_rect.x1, area.pc_rect.y1),
                           (area.pc_rect.x2, area.pc_rect.y2),
-                          (0, 0, 255), 2)
+                          (255, 0, 0), 2)
 
         return image
 

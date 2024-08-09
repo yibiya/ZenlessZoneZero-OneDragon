@@ -1,7 +1,7 @@
 import os
 from PySide6.QtWidgets import QWidget, QFileDialog, QTableWidgetItem
 from cv2.typing import MatLike
-from qfluentwidgets import FluentIcon, PushButton, TableWidget, ToolButton, ComboBox, ImageLabel, CaptionLabel
+from qfluentwidgets import FluentIcon, PushButton, TableWidget, ToolButton, ComboBox, ImageLabel, CaptionLabel, LineEdit
 from typing import List, Optional
 
 from one_dragon.base.geometry.point import Point
@@ -13,6 +13,7 @@ from one_dragon.gui.component.interface.vertical_scroll_interface import Vertica
 from one_dragon.gui.component.label.click_image_label import ClickImageLabel, ImageScaleEnum
 from one_dragon.gui.component.row_widget import RowWidget
 from one_dragon.gui.component.setting_card.combo_box_setting_card import ComboBoxSettingCard
+from one_dragon.gui.component.setting_card.multi_push_setting_card import MultiPushSettingCard
 from one_dragon.gui.component.setting_card.switch_setting_card import SwitchSettingCard
 from one_dragon.gui.component.setting_card.text_setting_card import TextSettingCard
 from one_dragon.utils import os_utils, cv2_utils
@@ -23,22 +24,26 @@ from one_dragon.utils.log_utils import log
 class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
 
     def __init__(self, ctx: OneDragonContext, parent=None):
+        VerticalScrollInterface.__init__(
+            self,
+            ctx=ctx,
+            object_name='devtools_template_helper_interface',
+            parent=parent,
+            content_widget=None,
+            nav_text_cn='模板管理'
+        )
+
+        self.chosen_template: Optional[TemplateInfo] = None
+        self.last_screen_dir: Optional[str] = None  # 上一次选择的图片路径
+
+    def get_content_widget(self) -> QWidget:
         content_widget = RowWidget()
 
         content_widget.add_widget(self._init_left_part())
         content_widget.add_widget(self._init_mid_part())
         content_widget.add_widget(self._init_right_part())
 
-        self.chosen_template: Optional[TemplateInfo] = None
-
-        VerticalScrollInterface.__init__(
-            self,
-            ctx=ctx,
-            object_name='devtools_template_helper_interface',
-            parent=parent,
-            content_widget=content_widget,
-            nav_text_cn='模板管理'
-        )
+        return content_widget
 
     def _init_left_part(self) -> QWidget:
         widget = ColumnWidget()
@@ -54,6 +59,10 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
         self.create_btn.clicked.connect(self._on_create_clicked)
         btn_row.add_widget(self.create_btn)
 
+        self.copy_btn = PushButton(text=gt('复制', 'ui'))
+        self.copy_btn.clicked.connect(self._on_copy_clicked)
+        btn_row.add_widget(self.copy_btn)
+
         self.delete_btn = PushButton(text=gt('删除', 'ui'))
         self.delete_btn.clicked.connect(self._on_delete_clicked)
         btn_row.add_widget(self.delete_btn)
@@ -66,6 +75,10 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
 
         save_row = RowWidget()
         widget.add_widget(save_row)
+
+        self.choose_image_btn = PushButton(text=gt('选择图片', 'ui'))
+        self.choose_image_btn.clicked.connect(self.choose_existed_image)
+        save_row.add_widget(self.choose_image_btn)
 
         self.save_config_btn = PushButton(text=gt('保存配置', 'ui'))
         self.save_config_btn.clicked.connect(self._on_save_config_clicked)
@@ -81,9 +94,19 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
 
         save_row.add_stretch(1)
 
-        self.choose_image_btn = PushButton(text=gt('选择图片', 'ui'))
-        self.choose_image_btn.clicked.connect(self.choose_existed_image)
-        widget.add_widget(self.choose_image_btn)
+        self.h_move_input = LineEdit()
+        self.h_btn = PushButton(text='移动')
+        self.h_btn.clicked.connect(self._on_h_move_clicked)
+        self.h_move_opt = MultiPushSettingCard(icon=FluentIcon.MOVE, title='横移',
+                                               btn_list=[self.h_move_input, self.h_btn])
+        widget.add_widget(self.h_move_opt)
+
+        self.v_move_input = LineEdit()
+        self.v_btn = PushButton(text='移动')
+        self.v_btn.clicked.connect(self._on_v_move_clicked)
+        self.v_move_opt = MultiPushSettingCard(icon=FluentIcon.MOVE, title='纵移',
+                                               btn_list=[self.v_move_input, self.v_btn])
+        widget.add_widget(self.v_move_opt)
 
         self.template_sub_dir_opt = TextSettingCard(icon=FluentIcon.HOME, title='画面')
         self.template_sub_dir_opt.line_edit.setFixedWidth(240)
@@ -179,6 +202,7 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
         子界面显示时 进行初始化
         :return:
         """
+        VerticalScrollInterface.on_interface_shown(self)
         self._update_whole_display()
 
     def _update_whole_display(self) -> None:
@@ -190,14 +214,22 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
 
         self.existed_yml_btn.setDisabled(chosen)
         self.create_btn.setDisabled(chosen)
+        self.copy_btn.setDisabled(not chosen)
         self.delete_btn.setDisabled(not chosen)
         self.cancel_btn.setDisabled(not chosen)
 
+        self.choose_image_btn.setDisabled(not chosen)
         self.save_config_btn.setDisabled(not chosen)
         self.save_raw_btn.setDisabled(not chosen)
         self.save_mask_btn.setDisabled(not chosen)
 
-        self.choose_image_btn.setDisabled(not chosen)
+        self.h_move_input.setDisabled(not chosen)
+        self.h_btn.setDisabled(not chosen)
+        self.h_move_opt.setDisabled(not chosen)
+        self.v_move_input.setDisabled(not chosen)
+        self.v_btn.setDisabled(not chosen)
+        self.v_move_opt.setDisabled(not chosen)
+
         self.template_sub_dir_opt.setDisabled(not chosen)
         self.template_id_opt.setDisabled(not chosen)
         self.template_name_opt.setDisabled(not chosen)
@@ -232,7 +264,7 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
         except Exception:
             pass
         self.existed_yml_btn.clear()
-        template_info_list: List[TemplateInfo] = self.ctx.template_loader.get_all_template_info(need_raw=False, need_config=True)
+        template_info_list: List[TemplateInfo] = self.ctx.template_loader.get_all_template_info_from_disk(need_raw=False, need_config=True)
         for template_info in template_info_list:
             self.existed_yml_btn.addItem(text=template_info.template_name, icon=None, userData=template_info)
         self.existed_yml_btn.setCurrentIndex(-1)
@@ -355,6 +387,17 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
         self.chosen_template = TemplateInfo('', '')
         self._update_whole_display()
 
+    def _on_copy_clicked(self):
+        """
+        复制一个
+        :return:
+        """
+        if self.chosen_template is None:
+            return
+
+        self.chosen_template.copy_new()
+        self._update_whole_display()
+
     def _on_save_config_clicked(self) -> None:
         """
         保存配置
@@ -415,7 +458,11 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
         选择已有的环图片
         :return:
         """
-        default_dir = os_utils.get_path_under_work_dir('.debug', 'images')
+        if self.last_screen_dir is not None:
+            default_dir = self.last_screen_dir
+        else:
+            default_dir = os_utils.get_path_under_work_dir('.debug', 'images')
+
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             gt('选择图片', 'ui'),
@@ -425,6 +472,7 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
         if file_path is not None and file_path.endswith('.png'):
             fix_file_path = os.path.normpath(file_path)
             log.info('选择路径 %s', fix_file_path)
+            self.last_screen_dir = os.path.dirname(fix_file_path)
             self._on_image_chosen(fix_file_path)
 
     def _on_image_chosen(self, image_file_path: str) -> None:
@@ -525,3 +573,35 @@ class DevtoolsTemplateHelperInterface(VerticalScrollInterface):
 
         self._update_point_table_display()
         self._update_all_image_display()
+
+    def _on_h_move_clicked(self) -> None:
+        """
+        所有点为的横坐标改变
+        """
+        if self.chosen_template is None:
+            return
+
+        input = self.h_move_input.text()
+        try:
+            dx = int(input)
+            self.chosen_template.update_all_points(dx, 0)
+            self._update_point_table_display()
+            self._update_all_image_display()
+        except Exception:
+            pass
+
+    def _on_v_move_clicked(self) -> None:
+        """
+        所有点为的纵坐标改变
+        """
+        if self.chosen_template is None:
+            return
+
+        input = self.v_move_input.text()
+        try:
+            dy = int(input)
+            self.chosen_template.update_all_points(0, dy)
+            self._update_point_table_display()
+            self._update_all_image_display()
+        except Exception:
+            pass

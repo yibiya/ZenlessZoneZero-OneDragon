@@ -1,45 +1,59 @@
-from typing import List
-
-from one_dragon.base.conditional_operation.atomic_op import AtomicOp
-from one_dragon.base.conditional_operation.state_recorder import StateRecorder
 from one_dragon.base.operation.one_dragon_context import OneDragonContext
 from one_dragon.utils import i18_utils
-from one_dragon.utils.i18_utils import gt
+from zzz_od.application.battle_assistant.battle_assistant_config import BattleAssistantConfig
+from zzz_od.application.charge_plan.charge_plan_run_record import ChargePlanRunRecord
 from zzz_od.application.devtools.screenshot_helper.screenshot_helper_config import ScreenshotHelperConfig
-from zzz_od.application.dodge_assistant.dodge_assistant_config import DodgeAssistantConfig
+from zzz_od.application.email.email_run_record import EmailRunRecord
+from zzz_od.application.engagement_reward.engagement_reward_run_record import EngagementRewardRunRecord
+from zzz_od.application.notorious_hunt.notorious_hunt_config import NotoriousHuntConfig
+from zzz_od.application.notorious_hunt.notorious_hunt_run_record import NotoriousHuntRunRecord
+from zzz_od.application.random_play.random_play_run_record import RandomPlayRunRecord
+from zzz_od.application.scratch_card.scratch_card_run_record import ScratchCardRunRecord
+from zzz_od.application.charge_plan.charge_plan_config import ChargePlanConfig
 from zzz_od.config.game_config import GameConfig, GamePlatformEnum
-from zzz_od.config.one_dragon_config import OneDragonConfig
-from zzz_od.context.battle_context import BattleContext
-from zzz_od.context.battle_context import BattleEventEnum
-from zzz_od.context.yolo_context import YoloContext
-from zzz_od.context.yolo_context import YoloStateEventEnum
 from zzz_od.controller.zzz_pc_controller import ZPcController
+from zzz_od.game_data.compendium import CompendiumService
+from zzz_od.game_data.map_area import MapAreaService
 
 
-class ZContext(OneDragonContext, YoloContext, BattleContext):
+class ZContext(OneDragonContext):
 
     def __init__(self):
         OneDragonContext.__init__(self)
-        YoloContext.__init__(self, event_bus=self)
-        BattleContext.__init__(self, event_bus=self)
 
-        self.one_dragon_config: OneDragonConfig = OneDragonConfig()
-
-        self.init_instance_config()
-
-    def init_instance_config(self) -> None:
-        """
-        按实例初始化配置
-        :return:
-        """
         instance_idx = 0
+
+        # 其它上下文
+        from zzz_od.context.battle_context import BattleContext
+        self.battle: BattleContext = BattleContext(self)
+
+        from zzz_od.context.yolo_context import YoloContext
+        self.yolo: YoloContext = YoloContext(self)
+
+        from zzz_od.context.custom_battle_context import CustomBattleContext
+        self.custom_battle: CustomBattleContext = CustomBattleContext(self)
 
         # 基础配置
         self.game_config: GameConfig = GameConfig(instance_idx)
 
+        # 游戏数据
+        self.map_service: MapAreaService = MapAreaService()
+        self.compendium_service: CompendiumService = CompendiumService()
+
         # 应用配置
         self.screenshot_helper_config: ScreenshotHelperConfig = ScreenshotHelperConfig(instance_idx)
-        self.dodge_assistant_config: DodgeAssistantConfig = DodgeAssistantConfig(instance_idx)
+        self.battle_assistant_config: BattleAssistantConfig = BattleAssistantConfig(instance_idx)
+        self.charge_plan_config: ChargePlanConfig = ChargePlanConfig(instance_idx)
+        self.notorious_hunt_config: NotoriousHuntConfig = NotoriousHuntConfig(instance_idx)
+
+        # 运行记录
+        game_refresh_hour_offset = self.game_config.game_refresh_hour_offset
+        self.email_run_record: EmailRunRecord = EmailRunRecord(instance_idx, game_refresh_hour_offset)
+        self.random_play_run_record: RandomPlayRunRecord = RandomPlayRunRecord(instance_idx, game_refresh_hour_offset)
+        self.scratch_card_run_record: ScratchCardRunRecord = ScratchCardRunRecord(instance_idx, game_refresh_hour_offset)
+        self.charge_plan_run_record: ChargePlanRunRecord = ChargePlanRunRecord(instance_idx, game_refresh_hour_offset)
+        self.engagement_reward_run_record: EngagementRewardRunRecord = EngagementRewardRunRecord(instance_idx, game_refresh_hour_offset)
+        self.notorious_hunt_record: NotoriousHuntRunRecord = NotoriousHuntRunRecord(instance_idx, game_refresh_hour_offset)
 
     def init_by_config(self) -> None:
         """

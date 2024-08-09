@@ -16,6 +16,11 @@ from one_dragon.utils.i18_utils import gt
 class InstallerInterface(VerticalScrollInterface):
 
     def __init__(self, ctx: OneDragonContext, parent=None):
+        VerticalScrollInterface.__init__(self, ctx=ctx, object_name='install_interface',
+                                         parent=parent, content_widget=None,
+                                         nav_text_cn='一键安装', nav_icon=FluentIcon.CLOUD_DOWNLOAD)
+
+    def get_content_widget(self) -> QWidget:
         content_widget = QWidget()
         v_layout = QVBoxLayout(content_widget)
 
@@ -28,20 +33,20 @@ class InstallerInterface(VerticalScrollInterface):
         self.progress_bar_2.setVisible(False)
         v_layout.addWidget(self.progress_bar_2)
 
-        self.git_opt = GitInstallCard(ctx)
+        self.git_opt = GitInstallCard(self.ctx)
         self.git_opt.progress_changed.connect(self.update_progress)
 
-        self.code_opt = CodeInstallCard(ctx)
+        self.code_opt = CodeInstallCard(self.ctx)
         self.code_opt.progress_changed.connect(self.update_progress)
         self.code_opt.finished.connect(self._on_code_updated)
 
-        self.python_opt = PythonInstallCard(ctx)
+        self.python_opt = PythonInstallCard(self.ctx)
         self.python_opt.progress_changed.connect(self.update_progress)
 
-        self.venv_opt = VenvInstallCard(ctx)
+        self.venv_opt = VenvInstallCard(self.ctx)
         self.venv_opt.progress_changed.connect(self.update_progress)
 
-        self.all_opt = AllInstallCard(ctx, [self.git_opt, self.code_opt, self.python_opt, self.venv_opt])
+        self.all_opt = AllInstallCard(self.ctx, [self.git_opt, self.code_opt, self.python_opt, self.venv_opt])
 
         update_group = SettingCardGroup(gt('运行环境', 'ui'))
         update_group.addSettingCard(self.all_opt)
@@ -53,19 +58,18 @@ class InstallerInterface(VerticalScrollInterface):
         v_layout.addWidget(update_group)
 
         log_group = SettingCardGroup(gt('安装日志', 'ui'))
-        self.log_card = LogDisplayCard(max_height=200)
+        self.log_card = LogDisplayCard()
         log_group.addSettingCard(self.log_card)
         v_layout.addWidget(log_group)
 
-        VerticalScrollInterface.__init__(self, ctx=ctx, object_name='install_interface',
-                                         parent=parent, content_widget=content_widget,
-                                         nav_text_cn='一键安装', nav_icon=FluentIcon.CLOUD_DOWNLOAD)
+        return content_widget
 
     def on_interface_shown(self) -> None:
         """
         页面加载完成后 检测各个组件状态并更新显示
         :return:
         """
+        VerticalScrollInterface.on_interface_shown(self)
         self.git_opt.check_and_update_display()
         self.code_opt.check_and_update_display()
         self.python_opt.check_and_update_display()
@@ -77,6 +81,7 @@ class InstallerInterface(VerticalScrollInterface):
         子界面隐藏时的回调
         :return:
         """
+        VerticalScrollInterface.on_interface_hidden(self)
         self.log_card.update_on_log = False
 
     def update_progress(self, progress: float, message: str) -> None:

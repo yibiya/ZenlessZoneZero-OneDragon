@@ -1,7 +1,7 @@
 import time
-from typing import List
 
 from cv2.typing import MatLike
+from typing import List
 
 from one_dragon.base.geometry.point import Point
 
@@ -25,9 +25,9 @@ class ControllerBase:
         self.screenshot_alive_seconds: float = screenshot_alive_seconds  # 截图在内存的存活时间
         self.max_screenshot_cnt: int = max_screenshot_cnt  # 内存中最多保持的截图数量
 
-    def init(self) -> bool:
+    def init_before_context_run(self) -> bool:
         """
-        初始化
+        运行前初始化
         :return:
         """
         return False

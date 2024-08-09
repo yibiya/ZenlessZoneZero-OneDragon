@@ -2,36 +2,135 @@ screen_id: battle
 screen_name: 战斗画面
 pc_alt: false
 area_list:
-- area_name: 角色头像1
+- area_name: 头像-3-1
   pc_rect:
+  - 104
+  - 40
+  - 274
   - 110
-  - 45
-  - 265
-  - 105
   text: ''
   lcs_percent: 0.1
   template_sub_dir: ''
   template_id: ''
   template_match_threshold: 0.7
-- area_name: 角色头像2
+- area_name: 头像-3-2
   pc_rect:
-  - 490
-  - 45
-  - 585
-  - 85
+  - 487
+  - 40
+  - 590
+  - 90
   text: ''
   lcs_percent: 0.1
   template_sub_dir: ''
   template_id: ''
   template_match_threshold: 0.7
-- area_name: 角色头像3
+- area_name: 头像-3-3
   pc_rect:
-  - 655
-  - 45
-  - 745
-  - 85
+  - 650
+  - 40
+  - 753
+  - 90
   text: ''
   lcs_percent: 0.1
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.7
+- area_name: 头像-2-2
+  pc_rect:
+  - 557
+  - 40
+  - 660
+  - 90
+  text: ''
+  lcs_percent: 0.1
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.7
+- area_name: 按键-特殊攻击
+  pc_rect:
+  - 1620
+  - 917
+  - 1720
+  - 1017
+  text: ''
+  lcs_percent: 0.1
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.9
+- area_name: 按键-终结技
+  pc_rect:
+  - 1728
+  - 778
+  - 1826
+  - 876
+  text: ''
+  lcs_percent: 0.1
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.7
+- area_name: 连携技-1
+  pc_rect:
+  - 479
+  - 828
+  - 597
+  - 946
+  text: ''
+  lcs_percent: 0.1
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.7
+- area_name: 连携技-2
+  pc_rect:
+  - 1322
+  - 828
+  - 1440
+  - 946
+  text: ''
+  lcs_percent: 0.1
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.7
+- area_name: 按键-切换角色
+  pc_rect:
+  - 1731
+  - 920
+  - 1827
+  - 1016
+  text: ''
+  lcs_percent: 0.1
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.7
+- area_name: 按钮-普通攻击
+  pc_rect:
+  - 1403
+  - 916
+  - 1505
+  - 1017
+  text: ''
+  lcs_percent: 0.5
+  template_sub_dir: battle
+  template_id: btn_normal_attack
+  template_match_threshold: 0.7
+- area_name: 战斗结果-完成
+  pc_rect:
+  - 1566
+  - 1004
+  - 1832
+  - 1056
+  text: 完成
+  lcs_percent: 0.5
+  template_sub_dir: ''
+  template_id: ''
+  template_match_threshold: 0.7
+- area_name: 战斗结果-再来一次
+  pc_rect:
+  - 1232
+  - 1006
+  - 1508
+  - 1052
+  text: 再来一次
+  lcs_percent: 0.5
   template_sub_dir: ''
   template_id: ''
   template_match_threshold: 0.7

@@ -2,11 +2,14 @@ import os
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget, QFileDialog, QTableWidgetItem
 from qfluentwidgets import FluentIcon, PushButton, TableWidget, ToolButton, ComboBox
+from typing import Optional
 
 from one_dragon.base.geometry.rectangle import Rect
 from one_dragon.base.operation.one_dragon_context import OneDragonContext
 from one_dragon.base.screen.screen_area import ScreenArea
 from one_dragon.base.screen.screen_info import ScreenInfo
+from one_dragon.base.screen.template_info import get_template_root_dir_path, get_template_sub_dir_path, TemplateInfo, \
+    TemplateShapeEnum
 from one_dragon.gui.component.column_widget import ColumnWidget
 from one_dragon.gui.component.cv2_image import Cv2Image
 from one_dragon.gui.component.interface.vertical_scroll_interface import VerticalScrollInterface
@@ -28,21 +31,17 @@ class ScreenInfoWorker(QObject):
 class DevtoolsScreenManageInterface(VerticalScrollInterface):
 
     def __init__(self, ctx: OneDragonContext, parent=None):
-        content_widget = RowWidget()
-
         VerticalScrollInterface.__init__(
             self,
             ctx=ctx,
-            content_widget=content_widget,
+            content_widget=None,
             object_name='devtools_screen_manage_interface',
             parent=parent,
             nav_text_cn='画面管理'
         )
 
-        content_widget.add_widget(self._init_left_part())
-        content_widget.add_widget(self._init_right_part())
-
-        self.chosen_screen: ScreenInfo = None
+        self.chosen_screen: Optional[ScreenInfo] = None
+        self.last_screen_dir: Optional[str] = None  # 上一次选择的图片路径
 
         self._whole_update = ScreenInfoWorker()
         self._whole_update.signal.connect(self._update_display_by_screen)
@@ -55,6 +54,12 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
 
         self._existed_yml_update = ScreenInfoWorker()
         self._existed_yml_update.signal.connect(self._update_existed_yml_options)
+
+    def get_content_widget(self) -> QWidget:
+        content_widget = RowWidget()
+        content_widget.add_widget(self._init_left_part())
+        content_widget.add_widget(self._init_right_part())
+        return content_widget
 
     def _init_left_part(self) -> QWidget:
         widget = ColumnWidget()
@@ -85,9 +90,16 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
 
         btn_row.add_stretch(1)
 
+        img_btn_row = RowWidget()
+        widget.add_widget(img_btn_row)
+
         self.choose_image_btn = PushButton(text=gt('选择图片', 'ui'))
         self.choose_image_btn.clicked.connect(self.choose_existed_image)
-        widget.add_widget(self.choose_image_btn)
+        img_btn_row.add_widget(self.choose_image_btn)
+
+        self.choose_template_btn = PushButton(text=gt('导入模板区域', 'ui'))
+        self.choose_template_btn.clicked.connect(self.choose_existed_template)
+        img_btn_row.add_widget(self.choose_template_btn)
 
         self.screen_id_opt = TextSettingCard(icon=FluentIcon.HOME, title='画面ID')
         self.screen_id_opt.value_changed.connect(self._on_screen_id_changed)
@@ -172,6 +184,7 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
         子界面显示时 进行初始化
         :return:
         """
+        VerticalScrollInterface.on_interface_shown(self)
         self._update_display_by_screen()
 
     def _update_display_by_screen(self) -> None:
@@ -220,7 +233,7 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
 
         for idx in range(area_cnt):
             area_item = area_list[idx]
-            del_btn = ToolButton(FluentIcon.DELETE)
+            del_btn = ToolButton(FluentIcon.DELETE, parent=None)
             del_btn.clicked.connect(self._on_row_delete_clicked)
 
             self.area_table.setCellWidget(idx, 0, del_btn)
@@ -231,7 +244,7 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
             self.area_table.setItem(idx, 5, QTableWidgetItem(area_item.template_id_display_text))
             self.area_table.setItem(idx, 6, QTableWidgetItem(str(area_item.template_match_threshold)))
 
-        add_btn = ToolButton(FluentIcon.ADD)
+        add_btn = ToolButton(FluentIcon.ADD, parent=None)
         add_btn.clicked.connect(self._on_area_add_clicked)
         self.area_table.setCellWidget(area_cnt, 0, add_btn)
         self.area_table.setItem(area_cnt, 1, QTableWidgetItem(''))
@@ -324,7 +337,10 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
         选择已有的环图片
         :return:
         """
-        default_dir = os_utils.get_path_under_work_dir('.debug', 'images')
+        if self.last_screen_dir is not None:
+            default_dir = self.last_screen_dir
+        else:
+            default_dir = os_utils.get_path_under_work_dir('.debug', 'images')
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             gt('选择图片', 'ui'),
@@ -334,6 +350,7 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
         if file_path is not None and file_path.endswith('.png'):
             fix_file_path = os.path.normpath(file_path)
             log.info('选择路径 %s', fix_file_path)
+            self.last_screen_dir = os.path.dirname(fix_file_path)
             self._on_image_chosen(fix_file_path)
 
     def _on_image_chosen(self, image_file_path: str) -> None:
@@ -347,6 +364,60 @@ class DevtoolsScreenManageInterface(VerticalScrollInterface):
 
         self.chosen_screen.screen_image = cv2_utils.read_image(image_file_path)
         self._image_update.signal.emit()
+
+    def choose_existed_template(self) -> None:
+        if self.chosen_screen is None:
+            return
+
+        template_root_dir = get_template_root_dir_path()
+        template_sub_dir = get_template_sub_dir_path(self.chosen_screen.screen_id)
+
+        if os.path.exists(template_sub_dir):
+            default_dir = template_sub_dir
+        else:
+            default_dir = template_root_dir
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            gt('选择模板配置文件', 'ui'),
+            dir=default_dir,
+            filter="YML (*.yml)",
+        )
+        if file_path is not None and file_path.endswith('.yml'):
+            fix_file_path = os.path.normpath(file_path)
+            log.info('选择路径 %s', fix_file_path)
+            self._on_template_chosen(fix_file_path)
+
+    def _on_template_chosen(self, template_file_path: str) -> None:
+        """
+        选择模板后 导入模板对应的区域
+        :param template_file_path: 模板文件路径
+        :return:
+        """
+        if self.chosen_screen is None:
+            return
+
+        directory, filename = os.path.split(template_file_path)
+        template_id = os.path.basename(directory)
+        sub_dir = os.path.basename(os.path.dirname(directory))
+
+        template_info = TemplateInfo(sub_dir=sub_dir, template_id=template_id)
+        template_info.update_template_shape(TemplateShapeEnum.RECTANGLE.value.value)
+
+        area = ScreenArea()
+        area.area_name = template_info.template_name
+        if len(template_info.point_list) >= 2:
+            p1 = template_info.point_list[0]
+            p2 = template_info.point_list[1]
+            # 需要取稍微比模板大一点的范围
+            area.pc_rect = Rect(max(0, p1.x - 10), max(0, p1.y - 10),
+                                min(self.ctx.project_config.screen_standard_width, p2.x + 10),
+                                min(self.ctx.project_config.screen_standard_height, p2.y + 10))
+        area.template_sub_dir = sub_dir
+        area.template_id = template_id
+
+        self.chosen_screen.area_list.append(area)
+        self._area_table_update.signal.emit()
 
     def _on_screen_id_changed(self, value: str) -> None:
         if self.chosen_screen is None:

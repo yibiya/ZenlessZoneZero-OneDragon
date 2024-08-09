@@ -1,135 +1,19 @@
 import time
-from enum import Enum
-from typing import Optional, ClassVar, Callable, List, Any
 
+import inspect
 from cv2.typing import MatLike
+from typing import Optional, ClassVar, Callable, List, Any
 
 from one_dragon.base.operation.one_dragon_context import OneDragonContext, ContextRunningStateEventEnum
 from one_dragon.base.operation.operation_base import OperationBase, OperationResult
-from one_dragon.base.screen.screen_area import ScreenArea
-from one_dragon.utils import cv2_utils, str_utils, debug_utils
-from one_dragon.utils.i18_utils import coalesce_gt, gt
+from one_dragon.base.operation.operation_edge import OperationEdge, OperationEdgeDesc
+from one_dragon.base.operation.operation_node import OperationNode
+from one_dragon.base.operation.operation_round_result import OperationRoundResultEnum, OperationRoundResult
+from one_dragon.base.screen import screen_utils
+from one_dragon.base.screen.screen_utils import OcrClickResultEnum, FindAreaResultEnum
+from one_dragon.utils import debug_utils
+from one_dragon.utils.i18_utils import coalesce_gt
 from one_dragon.utils.log_utils import log
-
-
-class OperationRoundResultEnum(Enum):
-    RETRY: int = 0  # 重试
-    SUCCESS: int = 1  # 成功
-    WAIT: int = 2  # 等待 本轮不计入
-    FAIL: int = -1  # 失败
-
-
-class OperationRoundResult:
-
-    def __init__(self, result: OperationRoundResultEnum, status: Optional[str] = None, data: Any = None):
-        """
-        指令单轮执行的结果
-        :param result: 结果
-        :param status: 附带状态
-        """
-        self.result: OperationRoundResultEnum = result
-        """单轮执行结果 - 框架固定"""
-        self.status: Optional[str] = status
-        """结果状态 - 每个指令独特"""
-        self.data: Any = data
-        """返回数据"""
-
-    @property
-    def is_success(self) -> bool:
-        return self.result == OperationRoundResultEnum.SUCCESS
-
-    @property
-    def status_display(self) -> str:
-        if self.result == OperationRoundResultEnum.SUCCESS:
-            return '成功'
-        elif self.result == OperationRoundResultEnum.RETRY:
-            return '重试'
-        elif self.result == OperationRoundResultEnum.WAIT:
-            return '等待'
-        elif self.result == OperationRoundResultEnum.FAIL:
-            return '失败'
-        else:
-            return '未知'
-
-
-class OperationNode:
-
-    def __init__(self, cn: str,
-                 func: Optional[Callable[[], OperationRoundResult]] = None,
-                 op: Optional[OperationBase] = None,
-                 retry_on_op_fail: bool = False,
-                 wait_after_op: Optional[float] = None,
-                 timeout_seconds: Optional[float] = None):
-        """
-        带状态指令的节点
-        :param cn: 节点名称
-        :param func: 该节点用于处理指令的函数 与op只传一个 优先使用func
-        :param op: 该节点用于操作的指令 与func只传一个 优先使用func
-        :param retry_on_op_fail: op指令失败时是否进入重试
-        :param wait_after_op: op指令后的等待时间
-        :param timeout_seconds: 该节点的超时秒数
-        """
-
-        self.cn: str = cn
-        """节点名称"""
-
-        self.func: Callable[[], OperationRoundResult] = func
-        """节点处理函数"""
-
-        self.op: Optional[Operation] = op
-        """节点操作指令"""
-
-        self.retry_on_op_fail: bool = retry_on_op_fail
-        """op指令失败时是否进入重试"""
-
-        self.wait_after_op: Optional[float] = wait_after_op
-        """op指令后的等待时间"""
-
-        self.timeout_seconds: Optional[float] = timeout_seconds
-        """该节点的超时秒数"""
-
-
-class StateOperationEdge:
-
-    def __init__(self, node_from: OperationNode, node_to: OperationNode,
-                 success: bool = True, status: Optional[str] = None, ignore_status: bool = True):
-        """
-        带状态指令的边
-        :param node_from: 上一个指令
-        :param node_to: 下一个指令
-        :param success: 是否成功才进入下一个节点
-        :param status: 上一个节点的结束状态 符合时才进入下一个节点
-        :param ignore_status: 是否忽略状态进行下一个节点 不会忽略success
-        """
-
-        self.node_from: OperationNode = node_from
-        """上一个节点"""
-
-        self.node_to: OperationNode = node_to
-        """下一个节点"""
-
-        self.success: bool = success
-        """是否成功才执行下一个节点"""
-
-        self.status: Optional[str] = status
-        """
-        执行下一个节点的条件状态 
-        一定要完全一样才会执行 包括None
-        """
-
-        self.ignore_status: bool = False if status is not None else ignore_status
-        """
-        是否忽略状态进行下一个节点
-        一个节点应该最多只有一条边忽略返回状态
-        忽略返回状态只有在所有需要匹配的状态都匹配不到时才会用做兜底
-        """
-
-
-class OcrClickResultEnum(Enum):
-
-    OCR_CLICK_SUCCESS: int = 1  # OCR并点击成功
-    OCR_CLICK_FAIL: int = 0  # OCR成功但点击失败 基本不会出现
-    OCR_CLICK_NOT_FOUND: int = -1  # OCR找不到目标
 
 
 class Operation(OperationBase):
@@ -143,7 +27,7 @@ class Operation(OperationBase):
                  op_name: str = '',
                  timeout_seconds: float = -1,
                  op_callback: Optional[Callable[[OperationResult], None]] = None,
-                 check_game_win: bool = True,
+                 need_check_game_win: bool = True,
                  op_to_enter_game:  Optional[OperationBase] = None
                  ):
         OperationBase.__init__(self)
@@ -163,7 +47,7 @@ class Operation(OperationBase):
         self.op_callback: Optional[Callable[[OperationResult], None]] = op_callback
         """指令结束后的回调"""
 
-        self.check_game_win: bool = check_game_win
+        self.need_check_game_win: bool = need_check_game_win
         """是否检测游戏窗口"""
 
         self.op_to_enter_game: OperationBase = op_to_enter_game
@@ -200,7 +84,7 @@ class Operation(OperationBase):
         self.param_start_node: OperationNode = None
         """入参的开始节点 当网络存在环时 需要自己指定"""
 
-        self._add_edge_list: List[StateOperationEdge] = []
+        self._add_edge_list: List[OperationEdge] = []
         """调用方法添加的边"""
 
         self._init_network()
@@ -220,12 +104,46 @@ class Operation(OperationBase):
         """
         pass
 
+    def _add_edges_and_nodes_by_annotation(self) -> None:
+        """
+        初始化前 读取类方法的标注 自动添加边和节点
+        :return:
+        """
+        node_name_map: dict[str, OperationNode] = {}
+        edge_desc_list: List[OperationEdgeDesc] = []
+
+        for name, method in inspect.getmembers(self, predicate=inspect.ismethod):
+            node: OperationNode = method.__annotations__.get('operation_node_annotation')
+            if node is not None:
+                node_name_map[node.cn] = node
+            else:  # 不是节点的话 一定没有边
+                continue
+            if node.is_start_node:
+                self.param_start_node = node
+            edges: List[OperationEdgeDesc] = method.__annotations__.get('operation_edge_annotation')
+            if edges is not None:
+                for edge in edges:
+                    edge.node_to_name = node.cn
+                    edge_desc_list.append(edge)
+
+        for edge_desc in edge_desc_list:
+            node_from = node_name_map.get(edge_desc.node_from_name, None)
+            if node_from is None:
+                raise ValueError('找不到节点 %s' % edge_desc.node_from_name)
+            node_to = node_name_map.get(edge_desc.node_to_name, None)
+            if node_to is None:
+                raise ValueError('找不到节点 %s' % edge_desc.node_to_name)
+            self.add_edge(node_from, node_to,
+                          success=edge_desc.success,
+                          status=edge_desc.status,
+                          ignore_status=edge_desc.ignore_status)
+
     def _init_edge_list(self) -> None:
         """
         初始化边列表
         :return:
         """
-        self.edge_list: List[StateOperationEdge] = []
+        self.edge_list: List[OperationEdge] = []
         """合并的边列表"""
 
         if len(self._add_edge_list) > 0:
@@ -243,18 +161,19 @@ class Operation(OperationBase):
         :param ignore_status:
         :return:
         """
-        self._add_edge_list.append(StateOperationEdge(node_from, node_to,
-                                                      success=success, status=status, ignore_status=ignore_status))
+        self._add_edge_list.append(OperationEdge(node_from, node_to,
+                                                 success=success, status=status, ignore_status=ignore_status))
 
     def _init_network(self) -> None:
         """
         进行节点网络的初始化
         :return:
         """
+        self._add_edges_and_nodes_by_annotation()
         self.add_edges_and_nodes()
         self._init_edge_list()
 
-        self._node_edges_map: dict[str, List[StateOperationEdge]] = {}
+        self._node_edges_map: dict[str, List[OperationEdge]] = {}
         """下一个节点的集合"""
 
         self._node_map: dict[str, OperationNode] = {}
@@ -295,16 +214,16 @@ class Operation(OperationBase):
         else:
             start_node = self.param_start_node
 
-        if self.check_game_win and start_node is not None:
+        if self.need_check_game_win and start_node is not None:
             check_game_window = OperationNode('检测游戏窗口', self.check_game_window)
             self._node_map[check_game_window.cn] = check_game_window
 
             open_and_enter_game = OperationNode('打开并进入游戏', self.open_and_enter_game)
             self._node_map[open_and_enter_game.cn] = open_and_enter_game
 
-            no_game_edge = StateOperationEdge(check_game_window, open_and_enter_game, success=False)
-            with_game_edge = StateOperationEdge(check_game_window, start_node)
-            enter_game_edge = StateOperationEdge(open_and_enter_game, start_node)
+            no_game_edge = OperationEdge(check_game_window, open_and_enter_game, success=False)
+            with_game_edge = OperationEdge(check_game_window, start_node)
+            enter_game_edge = OperationEdge(open_and_enter_game, start_node)
 
             self._node_edges_map[check_game_window.cn] = [no_game_edge, with_game_edge]
             self._node_edges_map[open_and_enter_game.cn] = [enter_game_edge]
@@ -385,8 +304,7 @@ class Operation(OperationBase):
                 if self.node_retry_times <= self.node_max_retry_times:
                     continue
                 else:
-                    op_result = self.op_fail(round_result.status, round_result.data)
-                    break
+                    round_result.result = OperationRoundResultEnum.FAIL
             elif round_result.result == OperationRoundResultEnum.WAIT:
                 continue
 
@@ -424,6 +342,8 @@ class Operation(OperationBase):
         if self._current_node.func is not None:
             current_op = self._current_node.func
             current_round_result: OperationRoundResult = current_op()
+        elif self._current_node.op_method is not None:
+            current_round_result: OperationRoundResult = self._current_node.op_method(self)
         elif self._current_node.op is not None:
             op_result = self._current_node.op.execute()
             current_round_result = self.round_by_op(op_result,
@@ -446,6 +366,8 @@ class Operation(OperationBase):
         :param current_round_result:
         :return:
         """
+        if self._current_node is None:
+            return None
         edges = self._node_edges_map.get(self._current_node.cn)
         if edges is None or len(edges) == 0:  # 没有下一个节点了
             return None
@@ -653,106 +575,74 @@ class Operation(OperationBase):
     def round_fail_by_op(self, op_result: OperationResult) -> OperationRoundResult:
         return self.round_fail(status=op_result.status, data=op_result.data)
 
-    def find_and_click_area(self, screen: MatLike, area: ScreenArea) -> OcrClickResultEnum:
-        """
-        在一个区域匹配成功后进行点击
-        :param screen: 屏幕截图
-        :param area: 目标区域
-        :return:
-        """
-        if area.is_text_area:
-            rect = area.rect
-            part = cv2_utils.crop_image_only(screen, rect)
-
-            ocr_result = self.ctx.ocr.ocr_for_single_line(part, strict_one_line=True)
-
-            if str_utils.find_by_lcs(gt(area.text, 'ocr'), ocr_result, percent=area.lcs_percent):
-                if self.ctx.controller.click(rect.center, pc_alt=area.pc_alt):
-                    return OcrClickResultEnum.OCR_CLICK_SUCCESS
-                else:
-                    return OcrClickResultEnum.OCR_CLICK_FAIL
-
-            return OcrClickResultEnum.OCR_CLICK_NOT_FOUND
-        elif area.is_template_area:
-            rect = area.rect
-            part = cv2_utils.crop_image_only(screen, rect)
-
-            mrl = self.ctx.tm.match_template(part, area.template_id,
-                                             template_sub_dir=area.template_sub_dir,
-                                             threshold=area.template_match_threshold)
-            if mrl.max is None:
-                return OcrClickResultEnum.OCR_CLICK_NOT_FOUND
-            elif self.ctx.controller.click(mrl.max.center + rect.left_top, pc_alt=area.pc_alt):
-                return OcrClickResultEnum.OCR_CLICK_SUCCESS
-            else:
-                return OcrClickResultEnum.OCR_CLICK_FAIL
-        else:
-            return OcrClickResultEnum.OCR_CLICK_FAIL
-
-    def round_by_find_and_click_area(self, screen: MatLike, area: ScreenArea,
+    def round_by_find_and_click_area(self, screen: MatLike, screen_name: str, area_name: str,
                                      success_wait: Optional[float] = None, success_wait_round: Optional[float] = None,
                                      retry_wait: Optional[float] = None, retry_wait_round: Optional[float] = None,
                                      ) -> OperationRoundResult:
         """
         是否能找到目标区域 并进行点击
         :param screen: 屏幕截图
-        :param area: 目标区域
+        :param screen_name: 画面名称
+        :param area_name: 区域名称
         :param success_wait: 成功后等待的秒数
         :param success_wait_round: 成功后等待当前轮的运行时间到达这个时间时再结束 优先success_wait
         :param retry_wait: 失败后等待的秒数
         :param retry_wait_round: 失败后等待当前轮的运行时间到达这个时间时再结束 优先success_wait
         :return:
         """
-        click = self.find_and_click_area(screen=screen, area=area)
+        click = screen_utils.find_and_click_area(ctx=self.ctx, screen=screen, screen_name=screen_name, area_name=area_name)
         if click == OcrClickResultEnum.OCR_CLICK_SUCCESS:
-            return self.round_success(status=area.area_name, wait=success_wait, wait_round_time=success_wait_round)
+            return self.round_success(status=area_name, wait=success_wait, wait_round_time=success_wait_round)
         elif click == OcrClickResultEnum.OCR_CLICK_NOT_FOUND:
-            return self.round_retry(status=f'未找到{area.area_name}', wait=retry_wait, wait_round_time=retry_wait_round)
+            return self.round_retry(status=f'未找到{area_name}', wait=retry_wait, wait_round_time=retry_wait_round)
         elif click == OcrClickResultEnum.OCR_CLICK_FAIL:
-            return self.round_retry(status=f'点击{area.area_name}失败', wait=retry_wait, wait_round_time=retry_wait_round)
+            return self.round_retry(status=f'点击{area_name}失败', wait=retry_wait, wait_round_time=retry_wait_round)
+        elif click == OcrClickResultEnum.AREA_NO_CONFIG:
+            return self.round_fail(status=f'区域{area_name}未配置')
         else:
             return self.round_retry(status='未知状态', wait=retry_wait, wait_round_time=retry_wait_round)
 
-    def find_area(self, screen: MatLike, area: ScreenArea) -> bool:
-        """
-        在一个区域匹配成功后进行点击
-        :param screen: 屏幕截图
-        :param area: 目标区域
-        :return:
-        """
-        if area.is_text_area:
-            rect = area.rect
-            part = cv2_utils.crop_image_only(screen, rect)
-
-            ocr_result = self.ctx.ocr.ocr_for_single_line(part, strict_one_line=True)
-
-            return str_utils.find_by_lcs(gt(area.text, 'ocr'), ocr_result, percent=area.lcs_percent)
-        elif area.is_template_area:
-            rect = area.rect
-            part = cv2_utils.crop_image_only(screen, rect)
-
-            mrl = self.ctx.tm.match_template(part, area.template_id,
-                                             template_sub_dir=area.template_sub_dir,
-                                             threshold=area.template_match_threshold)
-            return mrl.max is not None
-        else:
-            return False
-
-    def round_by_find_area(self, screen: MatLike, area: ScreenArea,
+    def round_by_find_area(self, screen: MatLike, screen_name: str, area_name: str,
                            success_wait: Optional[float] = None, success_wait_round: Optional[float] = None,
                            retry_wait: Optional[float] = None, retry_wait_round: Optional[float] = None,
                            ) -> OperationRoundResult:
         """
         是否能找到目标区域
         :param screen: 屏幕截图
-        :param area: 目标区域
+        :param screen_name: 画面名称
+        :param area_name: 区域名称
         :param success_wait: 成功后等待的秒数
         :param success_wait_round: 成功后等待当前轮的运行时间到达这个时间时再结束 优先success_wait
         :param retry_wait: 失败后等待的秒数
         :param retry_wait_round: 失败后等待当前轮的运行时间到达这个时间时再结束 优先success_wait
         :return:
         """
-        if self.find_area(screen=screen, area=area):
+        result = screen_utils.find_area(ctx=self.ctx, screen=screen, screen_name=screen_name, area_name=area_name)
+        if result == FindAreaResultEnum.AREA_NO_CONFIG:
+            return self.round_fail(status=f'区域{area_name}未配置')
+        elif result == FindAreaResultEnum.TRUE:
             return self.round_success(wait=success_wait, wait_round_time=success_wait_round)
         else:
             return self.round_retry(wait=retry_wait, wait_round_time=retry_wait_round)
+
+    def click_area(self, screen_name: str, area_name: str) -> bool:
+        """
+        无脑点击某个区域一次
+        :param screen_name:
+        :param area_name:
+        :return: 是否点击成功
+        """
+        area = self.ctx.screen_loader.get_area(screen_name, area_name)
+        if area is None:
+            return False
+        return self.ctx.controller.click(pos=area.center, pc_alt=area.pc_alt)
+
+    def round_by_click_area(
+            self, screen_name: str, area_name: str,
+            success_wait: Optional[float] = None, success_wait_round: Optional[float] = None,
+            retry_wait: Optional[float] = None, retry_wait_round: Optional[float] = None
+    ) -> OperationRoundResult:
+        if self.click_area(screen_name, area_name):
+            return self.round_success(wait=success_wait, wait_round_time=success_wait_round)
+        else:
+            return self.round_retry(status=f'点击{area_name}失败', wait=retry_wait, wait_round_time=retry_wait_round)

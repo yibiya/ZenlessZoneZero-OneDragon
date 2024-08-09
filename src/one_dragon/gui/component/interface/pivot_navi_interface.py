@@ -28,6 +28,8 @@ class PivotNavigatorInterface(BaseInterface):
         self.v_box_layout.addWidget(self.stacked_widget)
         self.v_box_layout.setContentsMargins(0, 0, 0, 0)
 
+        self.create_sub_interface()
+        qrouter.setDefaultRouteKey(self.stacked_widget, self.stacked_widget.currentWidget().objectName())
         self.stacked_widget.currentChanged.connect(self.on_current_index_changed)
 
     def add_sub_interface(self, sub_interface: BaseInterface):
@@ -42,6 +44,13 @@ class PivotNavigatorInterface(BaseInterface):
             self.stacked_widget.setCurrentWidget(sub_interface)
         if self.pivot.currentItem() is None:
             self.pivot.setCurrentItem(sub_interface.objectName())
+
+    def create_sub_interface(self):
+        """
+        创建下面的子页面
+        :return:
+        """
+        pass
 
     def on_current_index_changed(self, index):
         if index != self._last_stack_idx:

@@ -18,6 +18,15 @@ class SettingEnvInterface(VerticalScrollInterface):
     def __init__(self, ctx: OneDragonContext, parent=None):
         self.ctx: OneDragonContext = ctx
 
+        VerticalScrollInterface.__init__(
+            self,
+            ctx=ctx,
+            object_name='setting_env_interface',
+            content_widget=None, parent=parent,
+            nav_text_cn='脚本环境'
+        )
+
+    def get_content_widget(self) -> QWidget:
         content_widget = QWidget()
         content_layout = VBoxLayout(content_widget)
         content_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -27,13 +36,7 @@ class SettingEnvInterface(VerticalScrollInterface):
         content_layout.addWidget(self._init_web_group())
         content_layout.addWidget(self._init_key_group())
 
-        VerticalScrollInterface.__init__(
-            self,
-            ctx=ctx,
-            object_name='setting_env_interface',
-            content_widget=content_widget, parent=parent,
-            nav_text_cn='脚本环境'
-        )
+        return content_widget
 
     def _init_basic_group(self) -> SettingCardGroup:
         basic_group = SettingCardGroup(gt('基础', 'ui'))
@@ -118,11 +121,11 @@ class SettingEnvInterface(VerticalScrollInterface):
         self.key_screenshot_input.value_changed.connect(self._on_key_screenshot_changed)
         key_group.addSettingCard(self.key_screenshot_input)
 
-        self.key_mouse_pos_input = KeySettingCard(
-            icon=FluentIcon.MOVE, title='鼠标位置', content='日志中输出当前鼠标位置，用于开发'
+        self.key_debug_input = KeySettingCard(
+            icon=FluentIcon.MOVE, title='调试按钮', content='用于开发，部分应用开始调试'
         )
-        self.key_mouse_pos_input.value_changed.connect(self._on_key_mouse_position_changed)
-        key_group.addSettingCard(self.key_mouse_pos_input)
+        self.key_debug_input.value_changed.connect(self._on_key_debug_changed)
+        key_group.addSettingCard(self.key_debug_input)
 
         return key_group
 
@@ -131,6 +134,7 @@ class SettingEnvInterface(VerticalScrollInterface):
         子界面显示时 进行初始化
         :return:
         """
+        VerticalScrollInterface.on_interface_shown(self)
         theme = get_config_item_from_enum(ThemeEnum, self.ctx.env_config.theme)
         if theme is not None:
             self.theme_opt.setValue(theme.value)
@@ -140,7 +144,7 @@ class SettingEnvInterface(VerticalScrollInterface):
         self.key_start_running_input.setValue(self.ctx.env_config.key_start_running)
         self.key_stop_running_input.setValue(self.ctx.env_config.key_stop_running)
         self.key_screenshot_input.setValue(self.ctx.env_config.key_screenshot)
-        self.key_mouse_pos_input.setValue(self.ctx.env_config.key_mouse_pos)
+        self.key_debug_input.setValue(self.ctx.env_config.key_debug)
 
         repo_type = get_config_item_from_enum(RepositoryTypeEnum, self.ctx.env_config.repository_type)
         if repo_type is not None:
@@ -242,5 +246,5 @@ class SettingEnvInterface(VerticalScrollInterface):
     def _on_key_screenshot_changed(self, value: str) -> None:
         self.ctx.env_config.key_screenshot = value
 
-    def _on_key_mouse_position_changed(self, value: str) -> None:
-        self.ctx.env_config.key_mouse_pos = value
+    def _on_key_debug_changed(self, value: str) -> None:
+        self.ctx.env_config.key_debug = value

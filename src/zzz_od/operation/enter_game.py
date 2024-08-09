@@ -1,4 +1,6 @@
-from one_dragon.base.operation.operation import Operation, OperationRoundResult, OperationNode
+from one_dragon.base.operation.operation import Operation
+from one_dragon.base.operation.operation_round_result import OperationRoundResult
+from one_dragon.base.operation.operation_node import OperationNode
 from one_dragon.utils.i18_utils import gt
 from zzz_od.context.zzz_context import ZContext
 
@@ -7,7 +9,7 @@ class OpenAndEnterGame(Operation):
 
     def __init__(self, ctx: ZContext):
         Operation.__init__(self, ctx, op_name=gt('打开并登录游戏', 'ui'),
-                           check_game_win=False)
+                           need_check_game_win=False)
 
     def handle_init(self):
         """
